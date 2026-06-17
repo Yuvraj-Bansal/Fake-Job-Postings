@@ -1,0 +1,14 @@
+# Ignore all Pickle files
+*.pkl
+# Ignore all Jupyter Notebook checkpoints
+.ipynb_checkpoints/         
+# Ignore all compiled Python files
+__pycache__/
+*.pyc
+# Ignore all virtual environment directories
+venv/   
+# Ignore all data files
+data/
+# Ignore all model files
+models/
+
