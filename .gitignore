@@ -1,5 +1,8 @@
 # Ignore all Pickle files
 *.pkl
+!src/lr_model.pkl
+!src/tfidf.pkl
+!src/scaler.pkl
 # Ignore all Jupyter Notebook checkpoints
 .ipynb_checkpoints/         
 # Ignore all compiled Python files
