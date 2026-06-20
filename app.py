@@ -8,7 +8,11 @@ from src.features import (
     SUSPICIOUS_TITLE_KEYWORDS,
     SUSPICIOUS_DESC_KEYWORDS
 )
-from src.model import load_baseline_model, predict_baseline
+from src.model import (
+    load_baseline_model, predict_baseline,
+    load_distilbert_model, predict_distilbert,
+    load_optimal_threshold, build_distilbert_text
+)
 from src.explainer import (
     find_red_flags,
     highlight_text,
@@ -20,17 +24,17 @@ from src.explainer import (
 # ──────────────────────────────────────────────────────────────
 
 st.set_page_config(
-    page_title="JobGuard",
+    page_title="Fake Job Detector",
     page_icon="🛡️",
     layout="centered"
 )
 
 # ──────────────────────────────────────────────────────────────
-# Load Model
+# Load Models
 # ──────────────────────────────────────────────────────────────
 
 @st.cache_resource
-def get_model():
+def get_baseline_model():
     try:
         model, tfidf, scaler = load_baseline_model()
         return model, tfidf, scaler
@@ -38,14 +42,25 @@ def get_model():
         st.error(str(e))
         st.stop()
 
-lr_model, tfidf_vec, scaler = get_model()
+@st.cache_resource
+def get_distilbert_model():
+    # Downloads ~250MB from HuggingFace Hub on first run, then caches
+    # for the rest of the app's lifetime (not re-downloaded per click).
+    model, tokenizer = load_distilbert_model()
+    threshold = load_optimal_threshold()
+    return model, tokenizer, threshold
+
+lr_model, tfidf_vec, scaler = get_baseline_model()
+
+with st.spinner("Loading DistilBERT model from HuggingFace Hub ..."):
+    bert_model, bert_tokenizer, bert_threshold = get_distilbert_model()
 
 # ──────────────────────────────────────────────────────────────
 # UI
 # ──────────────────────────────────────────────────────────────
 
-st.title("🛡️ JobGuard")
-st.caption("Detect Fake Job Postings using Machine Learning")
+st.title("🛡️ Fake Job Detector")
+st.caption("Detect Fake Job Postings")
 
 st.divider()
 
@@ -61,6 +76,18 @@ job_description = st.text_area(
     height=250,
     placeholder="Paste the full job description..."
 )
+
+with st.expander("➕ Optional: Company Profile & Requirements (improves accuracy)"):
+    job_company_profile = st.text_area(
+        "Company Profile",
+        height=100,
+        placeholder="Paste the company's 'About Us' text, if listed..."
+    )
+    job_requirements = st.text_area(
+        "Requirements",
+        height=100,
+        placeholder="Paste the listed job requirements, if any..."
+    )
 
 st.divider()
 
@@ -108,18 +135,17 @@ if analyze:
             "Please provide a job title and a more detailed description."
         )
     else:
-        # Detect suspicious keywords
+        # ── Baseline model (TF-IDF + Logistic Regression) ──
+
         suspicious_title = has_suspicious_keywords(
             job_title,
             SUSPICIOUS_TITLE_KEYWORDS
         )
-
         suspicious_desc = has_suspicious_keywords(
             job_description,
             SUSPICIOUS_DESC_KEYWORDS
         )
 
-        # Build dataframe matching training schema
         row = pd.DataFrame([{
             "title": job_title,
             "company_profile": (
@@ -139,21 +165,17 @@ if analyze:
             "telecommuting": int(telecommuting)
         }])
 
-        # Generate structured features
         struct_arr = extract_structured_features(
             row
         ).iloc[0].values.copy()  # .copy() avoids "read-only array" errors
         struct_arr = struct_arr.astype(float)
 
-        # Overwrite auto-generated suspicious flags
         struct_arr[-2] = suspicious_title
         struct_arr[-1] = suspicious_desc
 
-        # Clean text
         cleaned_text = clean_text(full_text)
 
-        # Predict
-        prob = predict_baseline(
+        baseline_prob = predict_baseline(
             cleaned_text,
             struct_arr,
             lr_model,
@@ -161,29 +183,48 @@ if analyze:
             scaler
         )
 
-        # Risk level
-        level, color = risk_level(prob)
+        # ── DistilBERT model ──
+        bert_text = build_distilbert_text(
+            title=job_title,
+            company_profile=job_company_profile,
+            requirements=job_requirements,
+            description=job_description
+        )
+        bert_prob = predict_distilbert(bert_text, bert_model, bert_tokenizer)
 
         st.divider()
         st.subheader("🔎 Analysis Result")
 
-        if prob >= 0.5:
-            st.error(
-                f"⚠️ Likely FAKE Job Posting ({prob*100:.1f}% confidence)"
-            )
-        else:
-            st.success(
-                f"✅ Appears Legitimate ({(1-prob)*100:.1f}% confidence)"
-            )
+        # Side-by-side model comparison
+        col_a, col_b = st.columns(2)
 
-        st.progress(
-            float(prob),
-            text=f"Fake Probability: {prob*100:.1f}%"
+        with col_a:
+            st.markdown("**Baseline (TF-IDF + LR)**")
+            if baseline_prob >= 0.5:
+                st.error(f"⚠️ Likely FAKE ({baseline_prob*100:.1f}%)")
+            else:
+                st.success(f"✅ Likely Real ({(1-baseline_prob)*100:.1f}%)")
+            st.progress(float(baseline_prob), text=f"Fake prob: {baseline_prob*100:.1f}%")
+
+        with col_b:
+            st.markdown("**DistilBERT (fine-tuned)**")
+            if bert_prob >= bert_threshold:
+                st.error(f"⚠️ Likely FAKE ({bert_prob*100:.1f}%)")
+            else:
+                st.success(f"✅ Likely Real ({(1-bert_prob)*100:.1f}%)")
+            st.progress(float(bert_prob), text=f"Fake prob: {bert_prob*100:.1f}%")
+
+        st.caption(
+            f"DistilBERT uses an optimized decision threshold of {bert_threshold:.2f} "
+            f"(tuned for best F1 during training), not the default 0.5."
         )
 
-        st.markdown(
-            f"### Risk Level: :{color}[{level}]"
-        )
+        prob = bert_prob
+        level, color = risk_level(prob)
+
+        st.divider()
+        st.markdown(f"### Overall Risk Level: :{color}[{level}]")
+        st.caption("Based on the DistilBERT model's prediction (higher validation F1 than baseline).")
 
         st.divider()
 
@@ -205,7 +246,7 @@ if analyze:
             st.subheader("📄 Highlighted Text")
             st.markdown(
                 highlighted_text,
-                unsafe_allow_html=True  # Changed to True so your highlight html spans actually render color
+                unsafe_allow_html=True  
             )
         else:
             st.info(
@@ -215,7 +256,7 @@ if analyze:
         st.divider()
         st.subheader("💡 Safety Tips")
 
-        if prob >= 0.5:
+        if prob >= bert_threshold:
             st.markdown("""
 * Never pay money to get a job.
 * Verify the company on LinkedIn.
@@ -238,5 +279,6 @@ if analyze:
 
 st.divider()
 st.caption(
-    "JobGuard • TF-IDF + Logistic Regression + Structured Features"
+    "TF-IDF + Logistic Regression baseline (F1 0.82) • "
+    "DistilBERT fine-tuned (F1 0.91) • Structured Features"
 )
