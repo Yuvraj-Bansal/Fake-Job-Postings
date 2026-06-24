@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-
+from src.scraper import scrape_job_posting
 from src.preprocess import clean_text
 from src.features import (
     extract_structured_features,
@@ -185,15 +185,43 @@ st.markdown("""
 # Input
 # ──────────────────────────────────────────────────────────────
 
+st.markdown('<div class="jg-eyebrow">Start with a link, or type it yourself</div>', unsafe_allow_html=True)
+
+url_input = st.text_input(
+    "Job posting URL",
+    placeholder="https://www.linkedin.com/jobs/view/...  or any other job board",
+    key="job_url",
+)
+
+# Session state to hold scraped/typed values
+if "scraped" not in st.session_state:
+    st.session_state.scraped = {}
+
+if url_input:
+    if url_input != st.session_state.get("last_url"):
+        with st.spinner("Fetching the posting…"):
+            data = scrape_job_posting(url_input)
+        st.session_state.scraped = data
+        st.session_state.last_url = url_input
+
+        if data["error"]:
+            st.warning(f"Couldn't auto-fill: {data['error']}. Fill in the fields below manually.")
+        else:
+            st.success("Fields pre-filled from the posting. Edit anything that looks off.")
+
+scraped = st.session_state.get("scraped", {})
+
 st.markdown('<div class="jg-eyebrow">The posting</div>', unsafe_allow_html=True)
 
 job_title = st.text_input(
     "Title",
+    value=scraped.get("title", ""),
     placeholder="What's the role called?"
 )
 
 job_description = st.text_area(
     "Description",
+    value=scraped.get("description", ""),
     height=220,
     placeholder="Paste the description as it was written, word for word."
 )
@@ -202,13 +230,15 @@ with st.expander("Add the company profile or requirements, if listed"):
     st.caption("Optional — but the more of the original posting you paste in, the sharper the read.")
     job_company_profile = st.text_area(
         "Company profile",
+        value=scraped.get("company_profile", ""),
         height=90,
-        placeholder="The 'about us' blurb, if there was one..."
+        placeholder="The 'about us' blurb, if there was one...",
     )
     job_requirements = st.text_area(
         "Requirements",
+        value=scraped.get("requirements", ""),
         height=90,
-        placeholder="What they say they're looking for..."
+        placeholder="What they say they're looking for...",
     )
 
 st.markdown('<div class="jg-eyebrow">What else was on the page</div>', unsafe_allow_html=True)
@@ -216,27 +246,24 @@ st.caption("Tick what you also saw.")
 
 col1, col2, col3 = st.columns(3)
 with col1:
-    has_salary = st.checkbox("Salary range")
+    has_salary = st.checkbox("Salary range", value=scraped.get("has_salary", False))
 with col2:
-    has_company = st.checkbox("Company profile")
+    has_company = st.checkbox("Company profile", value=scraped.get("has_company", False))
 with col3:
-    has_logo = st.checkbox("Company logo")
+    has_logo = st.checkbox("Company logo", value=scraped.get("has_logo", False))
 
 col4, col5, col6 = st.columns(3)
 with col4:
-    has_requirements = st.checkbox("Requirements")
+    has_requirements = st.checkbox("Requirements", value=scraped.get("has_requirements", False))
 with col5:
-    has_benefits = st.checkbox("Benefits")
+    has_benefits = st.checkbox("Benefits", value=scraped.get("has_benefits", False))
 with col6:
-    telecommuting = st.checkbox("Remote role")
-
-st.write("")
-analyze = st.button("Check this posting", type="primary", use_container_width=True)
+    telecommuting = st.checkbox("Remote role", value=scraped.get("telecommuting", False))
 
 # ──────────────────────────────────────────────────────────────
 # Prediction
 # ──────────────────────────────────────────────────────────────
-
+analyze = st.button("Analyze Job", type="primary")
 if analyze:
     full_text = f"{job_title} {job_description}".strip()
 
