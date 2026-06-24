@@ -309,6 +309,12 @@ if analyze:
         level, color = risk_level(prob)
         level_class = level.lower().split()[0]
 
+        st.markdown(f"""
+        <div class="jg-risk-banner {level_class}">
+            <strong>{level}</strong> — based on the DistilBERT read, the stronger of the two models.
+        </div>
+        """, unsafe_allow_html=True)
+
         # Red Flags
         flags = find_red_flags(full_text)
 
