@@ -8,7 +8,7 @@ Built as an end-to-end ML project: EDA → feature engineering → baseline mode
 
 ## 🎯 Live Demo
 
-> 
+> https://fake-job-postings-9jvudqt3tfhn6ujhukx3km.streamlit.app/
 
 ---
 
@@ -45,8 +45,14 @@ These findings directly shaped the model design:
 
 ```
 ┌──────────────────────────────────────────────────────────┐
+│                   Live Job Web Scraper                   │
+│             (Extracts real-time job listings)            │
+└────────────────────────────┬─────────────────────────────┘
+                             │ (Feeds fresh text)
+                             │             
+┌────────────────────────────▼─────────────────────────────┐
 │                      Streamlit App                       │
-│              (job title, description, flags)             │
+│        (Accepts scraped text or manual user inputs)      │
 └────────────────────┬────────────────────┬────────────────┘
                      │                    │
             ┌────────▼─────────┐  ┌───────▼─────────┐
@@ -68,6 +74,12 @@ These findings directly shaped the model design:
                     + highlighted text
                     + safety tips
 ```
+## 🌐 Real-Time Data Collection (Web Scraper)
+To evolve this project beyond static historical datasets, I integrated a live automated web scraper. Instead of relying solely on pre-cleaned Kaggle data, the system can now pull and analyze live job postings directly from the web.
+
+* **Tech Stack:** [e.g., BeautifulSoup / Scrapy / Selenium]
+* **How it works:** It target-scrapes essential elements like `Job Title`, `Company Profile`, and `Description`, cleanly formats them, and passes them straight into our inference pipeline via the Streamlit interface.
+* **Why this matters:** It bridges the gap between historical training data and modern, evolving scam tactics happening live on the internet today.
 
 ### Two models, two different strengths
 - **Baseline (TF-IDF + LR)**: fast, interpretable, runs anywhere with no GPU. Sees structured features (logo, profile, salary presence) explicitly as numeric inputs.
