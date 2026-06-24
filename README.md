@@ -80,7 +80,7 @@ To evolve this project beyond static historical datasets, I integrated a live au
 * **Tech Stack:** [e.g., BeautifulSoup / Scrapy / Selenium]
 * **How it works:** It target-scrapes essential elements like `Job Title`, `Company Profile`, and `Description`, cleanly formats them, and passes them straight into our inference pipeline via the Streamlit interface.
 * **Why this matters:** It bridges the gap between historical training data and modern, evolving scam tactics happening live on the internet today.
-
+---
 ### Two models, two different strengths
 - **Baseline (TF-IDF + LR)**: fast, interpretable, runs anywhere with no GPU. Sees structured features (logo, profile, salary presence) explicitly as numeric inputs.
 - **DistilBERT**: captures semantic and contextual patterns in language that keyword-based methods miss. Trained on a structured-aware text format (`Title: ... [SEP] Profile: ... [SEP] Requirements: ... [SEP] Description: ...`) so it implicitly learns from field presence/absence too.
